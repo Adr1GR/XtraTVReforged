@@ -88,13 +88,16 @@ import com.github.andreyasadchy.xtra.ui.saved.SavedPagerFragment
 import com.github.andreyasadchy.xtra.ui.saved.downloads.DownloadsFragment
 import com.github.andreyasadchy.xtra.ui.team.TeamFragmentDirections
 import com.github.andreyasadchy.xtra.ui.top.TopStreamsFragmentDirections
+import com.github.andreyasadchy.xtra.ui.settings.SettingsActivity
 import com.github.andreyasadchy.xtra.util.C
 import com.github.andreyasadchy.xtra.util.TwitchApiHelper
 import com.github.andreyasadchy.xtra.util.applyTheme
 import com.github.andreyasadchy.xtra.util.getAlertDialogBuilder
+import com.github.andreyasadchy.xtra.util.isTv
 import com.github.andreyasadchy.xtra.util.prefs
 import com.github.andreyasadchy.xtra.util.tokenPrefs
 import com.google.android.material.color.MaterialColors
+import com.google.android.material.navigation.NavigationBarView
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.chromium.net.CronetProvider
@@ -995,6 +998,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startPlayer(fragment: Fragment) {
         playerFragment = fragment
+        binding.playerContainer.isFocusable = true
         supportFragmentManager.beginTransaction()
             .replace(R.id.playerContainer, fragment).commit()
         viewModel.isPlayerOpened = true
@@ -1012,6 +1016,7 @@ class MainActivity : AppCompatActivity() {
             .remove(supportFragmentManager.findFragmentById(R.id.playerContainer)!!)
             .commit()
         playerFragment = null
+        binding.playerContainer.isFocusable = false
         viewModel.isPlayerOpened = false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
             setPictureInPictureParams(PictureInPictureParams.Builder().setAutoEnterEnabled(false).build())
@@ -1023,6 +1028,9 @@ class MainActivity : AppCompatActivity() {
     private fun restorePlayerFragment() {
         if (playerFragment == null) {
             playerFragment = supportFragmentManager.findFragmentById(R.id.playerContainer) as? PlayerFragment
+            if (playerFragment != null) {
+                binding.playerContainer.isFocusable = true
+            }
             if (playerFragment == null) {
                 if (prefs.getString(C.PLAYER, C.EXOPLAYER) != C.MEDIA_PLAYER) {
                     viewModel.getPlaybackStates()
@@ -1132,8 +1140,16 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }, null)
-        binding.navBar.apply {
-            if (!prefs.getBoolean(C.UI_THEME_BOTTOM_NAV_COLOR, true) && prefs.getBoolean(C.UI_THEME_MATERIAL3, true)) {
+        val isTvMode = isTv()
+        val navView: NavigationBarView = if (isTvMode) {
+            binding.navBarContainer.visibility = View.GONE
+            binding.navRail.visibility = View.VISIBLE
+            binding.navRail
+        } else {
+            binding.navBar
+        }
+        navView.apply {
+            if (!isTvMode && !prefs.getBoolean(C.UI_THEME_BOTTOM_NAV_COLOR, true) && prefs.getBoolean(C.UI_THEME_MATERIAL3, true)) {
                 setBackgroundColor(MaterialColors.getColor(this, com.google.android.material.R.attr.colorSurface))
             }
             if (tabList.any { it.split(':')[2] != "0" }) {
@@ -1163,10 +1179,20 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             } else {
-                binding.navBarContainer.visibility = View.GONE
+                if (!isTvMode) {
+                    binding.navBarContainer.visibility = View.GONE
+                }
+            }
+            if (isTvMode) {
+                menu.add(Menu.NONE, R.id.searchPagerFragment, Menu.NONE, R.string.search).setIcon(R.drawable.baseline_search_black_24)
+                menu.add(Menu.NONE, R.id.navRailSettings, Menu.NONE, R.string.settings).setIcon(R.drawable.baseline_settings_black_24)
             }
             setupWithNavController(navController)
             setOnItemSelectedListener {
+                if (it.itemId == R.id.navRailSettings) {
+                    settingsResultLauncher?.launch(Intent(this@MainActivity, SettingsActivity::class.java))
+                    return@setOnItemSelectedListener false
+                }
                 NavigationUI.onNavDestinationSelected(it, navController)
                 return@setOnItemSelectedListener true
             }
