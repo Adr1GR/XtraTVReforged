@@ -1106,7 +1106,6 @@ class MainActivity : AppCompatActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (isTvDevice) {
             val handled = when (val fragment = playerFragment) {
-                is Media3PlayerFragment -> fragment.handleTvKeyEvent(event)
                 is PlayerFragment -> fragment.handleTvKeyEvent(event)
                 else -> false
             }
