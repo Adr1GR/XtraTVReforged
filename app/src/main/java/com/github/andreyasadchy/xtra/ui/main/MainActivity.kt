@@ -23,6 +23,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.os.ext.SdkExtensions
 import android.text.format.Formatter
+import android.view.KeyEvent
 import android.view.Menu
 import android.view.View
 import android.view.ViewGroup
@@ -120,6 +121,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityMainBinding
+    private val isTvDevice by lazy { isTv() }
     private val viewModel: MainViewModel by viewModels { MainViewModelFactory }
     private lateinit var navController: NavController
     var playerFragment: Fragment? = null
@@ -1099,6 +1101,18 @@ class MainActivity : AppCompatActivity() {
 
     fun popFragment() {
         navController.navigateUp()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (isTvDevice) {
+            val handled = when (val fragment = playerFragment) {
+                is Media3PlayerFragment -> fragment.handleTvKeyEvent(event)
+                is PlayerFragment -> fragment.handleTvKeyEvent(event)
+                else -> false
+            }
+            if (handled) return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun initNavigation() {
