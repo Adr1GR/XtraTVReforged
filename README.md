@@ -11,9 +11,9 @@ XtraTV Reforged is an unofficial fork of [Xtra](https://github.com/crackededed/X
 
 This repository is **not** the official Xtra project. It is based on the latest Xtra upstream and adds the TV features from [JoshTheMenace/XtraTV](https://github.com/JoshTheMenace/XtraTV), which was itself a fork of an older Xtra version. Those changes were ported on top of the current upstream code.
 
-### AI-assisted
+### AI DISCLAIMER
 
-The TV changes in this fork were written with the help of AI tools (Claude), both in the original XtraTV fork and in porting them to the current upstream. They have been compiled but only lightly tested on real hardware, so expect rough edges and review the code before trusting it.
+The TV changes in this fork were written with the help of AI tools (Claude), both in the original XtraTV fork and in porting them to the current upstream.
 
 ### TV features
 
