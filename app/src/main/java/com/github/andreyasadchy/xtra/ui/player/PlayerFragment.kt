@@ -20,6 +20,7 @@ import android.text.format.DateFormat
 import android.text.format.DateUtils
 import android.util.TypedValue
 import android.view.GestureDetector
+import android.view.FocusFinder
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.LayoutInflater
@@ -131,101 +132,187 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private val backPressedCallback = object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
             if (requireContext().isTv()) {
-                // a minimized player can't be touched to restore or close on TV
-                close()
-                (requireActivity() as? MainActivity)?.closePlayer()
+                // Back arrives here rather than in dispatchKeyEvent (predictive back is enabled).
+                // First press hides the controls, the next one closes the player: a minimized
+                // player can't be reached with a remote.
+                if (view != null && binding.playerControls.root.isVisible && binding.playerControls.root.alpha > 0f) {
+                    hideController(force = true)
+                } else {
+                    close()
+                    (requireActivity() as? MainActivity)?.closePlayer()
+                }
             } else {
                 minimize()
             }
         }
     }
 
+    protected val tvMode by lazy { requireContext().isTv() }
+
     // Remote control handling while the player is fullscreen on TV. Called from
     // MainActivity.dispatchKeyEvent before the event reaches the view tree, so the
-    // browsing UI behind the player never sees D-pad input (a center press used to
-    // re-click the stream card behind the player and restart playback).
+    // browsing UI behind the player never sees D-pad input.
+    //
+    // Controls hidden:  OK / up / down show the controls with focus on the first control,
+    //                   left / right seek on VODs and clips (show the controls on live streams).
+    // Controls visible: the D-pad moves between the controls only, OK clicks the focused one,
+    //                   Back hides the controls (a second Back closes the player).
+    // Media keys and Menu / Info (chat) work in both states.
     fun handleTvKeyEvent(event: KeyEvent): Boolean {
         if (!isMaximized || view == null) return false
+        val isDown = event.action == KeyEvent.ACTION_DOWN
         val isLive = playbackService?.type == BasePlaybackService.STREAM
+        val controls = binding.playerControls.root
         when (event.keyCode) {
             KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_CAPTIONS, KeyEvent.KEYCODE_PROG_YELLOW -> {
-                if (event.action == KeyEvent.ACTION_DOWN && !requireContext().prefs().getBoolean(C.CHAT_DISABLE, false)) {
+                if (isDown && event.repeatCount == 0 && !requireContext().prefs().getBoolean(C.CHAT_DISABLE, false)) {
                     if (isChatOpen) hideChat() else showChat()
                 }
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                if (event.action == KeyEvent.ACTION_DOWN) {
+                if (isDown && event.repeatCount == 0) {
                     playPause()
-                    showController()
+                    showTvControls()
                 }
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_REWIND -> {
-                if (event.action == KeyEvent.ACTION_DOWN) tvSeekBy(-TV_SEEK_OFFSET)
+                if (isDown) tvSeekBy(-TV_SEEK_OFFSET)
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
-                if (event.action == KeyEvent.ACTION_DOWN) tvSeekBy(TV_SEEK_OFFSET)
+                if (isDown) tvSeekBy(TV_SEEK_OFFSET)
                 return true
             }
         }
-        if (binding.playerControls.root.isVisible) {
-            when (event.keyCode) {
-                KeyEvent.KEYCODE_BACK -> {
-                    if (event.action == KeyEvent.ACTION_DOWN) hideController()
-                    return true
-                }
-                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
-                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                    showController() // keep the overlay alive
-                    if (binding.playerControls.root.findFocus() != null) {
-                        return false // let the D-pad navigate and click the controls
-                    }
-                    // overlay is up only as seek/play feedback - keep repeated presses
-                    // seeking, and enter the buttons only on an explicit up/down
-                    if (event.action == KeyEvent.ACTION_DOWN) {
-                        when (event.keyCode) {
-                            KeyEvent.KEYCODE_DPAD_LEFT -> if (!isLive) tvSeekBy(-TV_SEEK_OFFSET)
-                            KeyEvent.KEYCODE_DPAD_RIGHT -> if (!isLive) tvSeekBy(TV_SEEK_OFFSET)
-                            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> binding.playerControls.playPause.requestFocus()
-                            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> playPause()
-                        }
-                    }
-                    return true
-                }
-                else -> return false
+        val direction = when (event.keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT -> View.FOCUS_LEFT
+            KeyEvent.KEYCODE_DPAD_RIGHT -> View.FOCUS_RIGHT
+            KeyEvent.KEYCODE_DPAD_UP -> View.FOCUS_UP
+            KeyEvent.KEYCODE_DPAD_DOWN -> View.FOCUS_DOWN
+            else -> null
+        }
+        val isSelect = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER ||
+                event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+        if (controls.isVisible && controls.alpha > 0f) {
+            if (event.keyCode == KeyEvent.KEYCODE_BACK) {
+                if (isDown && event.repeatCount == 0) hideController()
+                return true
             }
-        } else {
-            when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                    if (event.action == KeyEvent.ACTION_DOWN) {
-                        playPause()
-                        showController()
+            if (direction == null && !isSelect) return false
+            showTvControls(focus = false) // any key keeps the overlay alive
+            val focused = controls.findFocus()
+            if (focused == null) {
+                // The overlay is up without focus, e.g. as feedback for seeking with the controls
+                // hidden: keep left/right seeking, and enter the controls with up/down/OK.
+                if (isDown) {
+                    if (!isLive && (direction == View.FOCUS_LEFT || direction == View.FOCUS_RIGHT)) {
+                        tvSeekBy(if (direction == View.FOCUS_LEFT) -TV_SEEK_OFFSET else TV_SEEK_OFFSET)
+                    } else if (event.repeatCount == 0) {
+                        focusTvControls()
                     }
-                    return true
                 }
-                KeyEvent.KEYCODE_DPAD_LEFT -> {
-                    if (event.action == KeyEvent.ACTION_DOWN) {
-                        if (isLive) showController() else tvSeekBy(-TV_SEEK_OFFSET)
-                    }
-                    return true
+                return true
+            }
+            if (isSelect) return false // the focused control handles the click
+            // the seek bar scrubs with left/right by itself
+            if (focused === binding.playerControls.progressBar &&
+                (direction == View.FOCUS_LEFT || direction == View.FOCUS_RIGHT)
+            ) return false
+            // Move focus only among the player controls. The browsing UI behind the player
+            // is still in the view tree and would otherwise take the focus.
+            if (isDown) {
+                (findTvControlTarget(focused, direction!!)
+                    ?: FocusFinder.getInstance().findNextFocus(controls as ViewGroup, focused, direction))
+                    ?.requestFocus()
+            }
+            return true
+        }
+        if (isSelect || direction == View.FOCUS_UP || direction == View.FOCUS_DOWN) {
+            if (isDown && event.repeatCount == 0) showTvControls()
+            return true
+        }
+        if (direction == View.FOCUS_LEFT || direction == View.FOCUS_RIGHT) {
+            if (isDown) {
+                if (isLive) {
+                    if (event.repeatCount == 0) showTvControls()
+                } else {
+                    tvSeekBy(if (direction == View.FOCUS_LEFT) -TV_SEEK_OFFSET else TV_SEEK_OFFSET)
                 }
-                KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    if (event.action == KeyEvent.ACTION_DOWN) {
-                        if (isLive) showController() else tvSeekBy(TV_SEEK_OFFSET)
-                    }
-                    return true
+            }
+            return true
+        }
+        return false
+    }
+
+    private fun showTvControls(focus: Boolean = true) {
+        val controls = binding.playerControls.root
+        if (!controls.isVisible || controls.alpha < 1f || controllerIsAnimating) {
+            // Show immediately: a fade-in races with moving the focus into the controls, and a
+            // running fade-out would hide them again. Cancel first, its end listener sets GONE.
+            controllerAnimation?.cancel()
+            controls.animate().cancel()
+            controllerIsAnimating = false
+            controls.alpha = 1f
+            controls.visibility = View.VISIBLE
+        }
+        showController() // restarts the auto-hide timer
+        if (focus && controls.findFocus() == null) {
+            focusTvControls()
+            // the controls may not be laid out yet if they were just made visible
+            controls.post {
+                if (view != null && controls.isVisible && controls.findFocus() == null) focusTvControls()
+            }
+        }
+    }
+
+    // The controls laid out as rows, top to bottom, each one left to right. Moving with the D-pad
+    // follows these rows instead of Android's geometric search, which jumps between corners.
+    private fun tvControlRows(): List<List<View>> {
+        with(binding.playerControls) {
+            fun ViewGroup.children() = (0 until childCount).map { getChildAt(it) }
+            val rows = listOf(
+                listOf(minimize, channel, category) + topRightLayout.children(),
+                listOf(rewind, playPause, fastForward),
+                bottomLeftLayout.children() + bottomRightLayout.children(),
+                listOf(progressBar),
+            )
+            return rows.map { row ->
+                row.filter { it.isVisible && it.isFocusable && it.isEnabled && it.width > 0 && it.parent.let { p -> p !is View || p.isVisible } }
+            }.filter { it.isNotEmpty() }
+        }
+    }
+
+    private fun findTvControlTarget(focused: View, direction: Int): View? {
+        val rows = tvControlRows()
+        val rowIndex = rows.indexOfFirst { focused in it }
+        if (rowIndex == -1) return null
+        val row = rows[rowIndex]
+        val index = row.indexOf(focused)
+        return when (direction) {
+            View.FOCUS_LEFT -> row.getOrNull(index - 1) ?: focused
+            View.FOCUS_RIGHT -> row.getOrNull(index + 1) ?: focused
+            else -> {
+                val target = rows.getOrNull(if (direction == View.FOCUS_UP) rowIndex - 1 else rowIndex + 1) ?: return focused
+                val location = IntArray(2)
+                fun centerX(view: View): Int {
+                    view.getLocationOnScreen(location)
+                    return location[0] + view.width / 2
                 }
-                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if (event.action == KeyEvent.ACTION_DOWN) {
-                        showController()
-                        binding.playerControls.playPause.requestFocus()
-                    }
-                    return true
-                }
-                else -> return false
+                val x = centerX(focused)
+                target.minByOrNull { kotlin.math.abs(centerX(it) - x) }
+            }
+        }
+    }
+
+    private fun focusTvControls() {
+        binding.playerControls.progressBar.setKeyTimeIncrement(TV_SEEK_OFFSET)
+        with(binding.playerControls) {
+            // play/pause first, then the seek bar, then whatever control is available
+            val target = listOf(playPause, progressBar).firstOrNull { it.isVisible && it.isFocusable && it.isEnabled }
+            if (target?.requestFocus() != true) {
+                root.requestFocus()
             }
         }
     }
@@ -236,7 +323,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             seek((position + offset).coerceAtLeast(0))
             updateProgress()
         }
-        showController()
+        showTvControls(focus = false)
     }
 
     open fun getCurrentPosition(): Long? = null
@@ -728,7 +815,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                                 seek(position)
                             } else {
                                 if (controllerAutoHide && controllerHideOnTouch) {
-                                    binding.playerControls.root.postDelayed(controllerHideAction, 3000)
+                                    binding.playerControls.root.postDelayed(controllerHideAction, if (tvMode) 6000 else 3000)
                                 }
                             }
                         }
@@ -816,7 +903,12 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                                 channelName = playbackService?.channelName,
                             )
                         )
-                        minimize()
+                        if (tvMode) {
+                            close()
+                            (requireActivity() as? MainActivity)?.closePlayer()
+                        } else {
+                            minimize()
+                        }
                     }
                 }
                 val titleText = playbackService?.title
@@ -844,10 +936,15 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                                 )
                             }
                         )
-                        minimize()
+                        if (tvMode) {
+                            close()
+                            (requireActivity() as? MainActivity)?.closePlayer()
+                        } else {
+                            minimize()
+                        }
                     }
                 }
-                if (requireContext().prefs().getBoolean(C.PLAYER_MINIMIZE, true)) {
+                if (requireContext().prefs().getBoolean(C.PLAYER_MINIMIZE, true) && !tvMode) {
                     minimize.visibility = View.VISIBLE
                     minimize.setOnClickListener { minimize() }
                 }
@@ -1355,7 +1452,8 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 playerLayout.isPortrait = false
                 chatLayout.isPortrait = false
                 with(playerControls) {
-                    if (requireContext().prefs().getBoolean(C.PLAYER_FULLSCREEN, true)) {
+                    // there is no portrait mode to switch to on TV
+                    if (requireContext().prefs().getBoolean(C.PLAYER_FULLSCREEN, true) && !tvMode) {
                         fullscreen.visibility = View.VISIBLE
                         fullscreen.setImageResource(R.drawable.baseline_fullscreen_exit_black_24)
                         fullscreen.setOnClickListener {
@@ -1832,6 +1930,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             if (!binding.playerControls.root.isVisible) {
                 binding.playerControls.root.removeCallbacks(controllerHideAction)
                 if (show) {
+                    binding.playerControls.root.visibility = View.VISIBLE
                     controllerAnimation = binding.playerControls.root.animate().apply {
                         alpha(1f)
                         setDuration(250L)
@@ -1848,7 +1947,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                                     controllerIsAnimating = false
                                     setListener(null)
                                     if (view != null && controllerAutoHide && controllerHideOnTouch && !binding.playerControls.progressBar.isPressed) {
-                                        binding.playerControls.root.postDelayed(controllerHideAction, 3000)
+                                        binding.playerControls.root.postDelayed(controllerHideAction, if (tvMode) 6000 else 3000)
                                     }
                                 }
                             }
@@ -1859,7 +1958,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             } else {
                 binding.playerControls.root.removeCallbacks(controllerHideAction)
                 if (controllerAutoHide && controllerHideOnTouch && !binding.playerControls.progressBar.isPressed) {
-                    binding.playerControls.root.postDelayed(controllerHideAction, 3000)
+                    binding.playerControls.root.postDelayed(controllerHideAction, if (tvMode) 6000 else 3000)
                 }
             }
         } else {
@@ -1869,7 +1968,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 binding.playerControls.root.alpha = 1f
                 binding.playerControls.root.visibility = View.VISIBLE
                 if (controllerAutoHide && controllerHideOnTouch && !binding.playerControls.progressBar.isPressed) {
-                    binding.playerControls.root.postDelayed(controllerHideAction, 3000)
+                    binding.playerControls.root.postDelayed(controllerHideAction, if (tvMode) 6000 else 3000)
                 }
             }
         }

@@ -90,6 +90,7 @@ import com.github.andreyasadchy.xtra.ui.saved.downloads.DownloadsFragment
 import com.github.andreyasadchy.xtra.ui.team.TeamFragmentDirections
 import com.github.andreyasadchy.xtra.ui.top.TopStreamsFragmentDirections
 import com.github.andreyasadchy.xtra.ui.settings.SettingsActivity
+import com.github.andreyasadchy.xtra.util.setupTvDialogFocusHighlight
 import com.github.andreyasadchy.xtra.util.setupTvFocusHighlight
 import com.github.andreyasadchy.xtra.util.C
 import com.github.andreyasadchy.xtra.util.TwitchApiHelper
@@ -159,7 +160,10 @@ class MainActivity : AppCompatActivity() {
         applyTheme()
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        if (isTv()) setupTvFocusHighlight()
+        if (isTv()) {
+            setupTvFocusHighlight()
+            setupTvDialogFocusHighlight()
+        }
         setNavBarColor(resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT)
         val ignoreCutouts = prefs.getBoolean(C.UI_DRAW_BEHIND_CUTOUTS, false)
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
@@ -1000,7 +1004,13 @@ class MainActivity : AppCompatActivity() {
 
 //Player methods
 
+    // the card that opened the player, to put the D-pad focus back on it when the player closes
+    private var focusBeforePlayer: java.lang.ref.WeakReference<View>? = null
+
     private fun startPlayer(fragment: Fragment) {
+        if (isTvDevice && playerFragment == null) {
+            focusBeforePlayer = currentFocus?.let { java.lang.ref.WeakReference(it) }
+        }
         playerFragment = fragment
         binding.playerContainer.isFocusable = true
         supportFragmentManager.beginTransaction()
@@ -1022,6 +1032,15 @@ class MainActivity : AppCompatActivity() {
         playerFragment = null
         binding.playerContainer.isFocusable = false
         viewModel.isPlayerOpened = false
+        if (isTvDevice) {
+            val previous = focusBeforePlayer?.get()
+            focusBeforePlayer = null
+            binding.root.post {
+                if (previous != null && previous.isAttachedToWindow && previous.isShown) {
+                    previous.requestFocus()
+                }
+            }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
             setPictureInPictureParams(PictureInPictureParams.Builder().setAutoEnterEnabled(false).build())
         }

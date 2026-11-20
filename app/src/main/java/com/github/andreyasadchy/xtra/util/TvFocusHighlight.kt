@@ -7,11 +7,15 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.util.TypedValue
 import android.view.View
-import android.view.ViewGroup
+import android.view.Window
 import android.widget.AbsListView
 import android.widget.ScrollView
 import android.webkit.WebView
 import androidx.core.widget.NestedScrollView
+import androidx.fragment.app.DialogFragment
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentActivity
+import androidx.fragment.app.FragmentManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.github.andreyasadchy.xtra.R
@@ -25,12 +29,31 @@ private class SavedForeground(val drawable: Drawable?)
  * video backgrounds alike). Call once per activity after setContentView.
  */
 fun Activity.setupTvFocusHighlight() {
-    val metrics = resources.displayMetrics
+    window.setupTvFocusHighlight()
+}
+
+/** Same as the Activity version, for the separate window of a dialog or bottom sheet. */
+fun Window.setupTvFocusHighlight() {
+    val decor = decorView
+    if (decor.getTag(R.id.tvFocusListenerInstalled) != null) return
+    decor.setTag(R.id.tvFocusListenerInstalled, true)
+    val metrics = decor.resources.displayMetrics
     val screenArea = metrics.widthPixels.toLong() * metrics.heightPixels
-    window.decorView.viewTreeObserver.addOnGlobalFocusChangeListener { oldFocus, newFocus ->
+    decor.viewTreeObserver.addOnGlobalFocusChangeListener { oldFocus, newFocus ->
         oldFocus?.let { clearFocusHighlight(it) }
         newFocus?.let { applyFocusHighlight(it, screenArea) }
     }
+}
+
+/** Highlights dialogs shown through DialogFragment (bottom sheets, preference dialogs...). */
+fun FragmentActivity.setupTvDialogFocusHighlight() {
+    supportFragmentManager.registerFragmentLifecycleCallbacks(object : FragmentManager.FragmentLifecycleCallbacks() {
+        override fun onFragmentStarted(fm: FragmentManager, f: Fragment) {
+            if (f is DialogFragment) {
+                f.dialog?.window?.setupTvFocusHighlight()
+            }
+        }
+    }, true)
 }
 
 private fun dp(view: View, value: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, view.resources.displayMetrics)
@@ -40,13 +63,24 @@ private fun applyFocusHighlight(view: View, screenArea: Long) {
         view.animate().scaleX(1.05f).scaleY(1.05f).translationZ(dp(view, 12f)).setDuration(120).start()
         return
     }
+    if (view is AbsListView) {
+        // list rows are not focusable on their own: the list draws a selector for the active row
+        if (view.getTag(R.id.tvFocusSavedForeground) == null) {
+            view.setTag(R.id.tvFocusSavedForeground, SavedForeground(null))
+            view.setSelector(createOutline(view))
+            view.setDrawSelectorOnTop(true)
+        }
+        return
+    }
     if (view is RecyclerView || view is ScrollView || view is NestedScrollView || view is ViewPager2 ||
         view is AbsListView || view is WebView || view is android.view.SurfaceView
     ) return
     if (view.width.toLong() * view.height > screenArea / 3) return
     if (view.getTag(R.id.tvFocusSavedForeground) != null) return
-    view.setTag(R.id.tvFocusSavedForeground, SavedForeground(view.foreground))
-    view.foreground = createOutline(view)
+    val original = view.foreground
+    view.setTag(R.id.tvFocusSavedForeground, SavedForeground(original))
+    // some controls draw their icon as the foreground: keep it under the outline
+    view.foreground = if (original != null) LayerDrawable(arrayOf(original, createOutline(view))) else createOutline(view)
 }
 
 private fun clearFocusHighlight(view: View) {

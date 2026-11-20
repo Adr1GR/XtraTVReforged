@@ -262,9 +262,18 @@ fun Activity.applyTheme() {
 }
 
 fun Context.getAlertDialogBuilder(): AlertDialog.Builder {
+    val tv = isTv()
     return if (prefs().getBoolean(C.UI_THEME_MATERIAL3, true)) {
-        MaterialAlertDialogBuilder(this)
+        object : MaterialAlertDialogBuilder(this) {
+            override fun create(): AlertDialog = super.create().also { if (tv) it.highlightFocusOnTv() }
+        }
     } else {
-        AlertDialog.Builder(this)
+        object : AlertDialog.Builder(this) {
+            override fun create(): AlertDialog = super.create().also { if (tv) it.highlightFocusOnTv() }
+        }
     }
+}
+
+private fun AlertDialog.highlightFocusOnTv() {
+    setOnShowListener { window?.setupTvFocusHighlight() }
 }

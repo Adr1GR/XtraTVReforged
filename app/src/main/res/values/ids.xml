@@ -2,4 +2,5 @@
 <resources>
     <item name="navRailSettings" type="id" />
     <item name="tvFocusSavedForeground" type="id" />
+    <item name="tvFocusListenerInstalled" type="id" />
 </resources>

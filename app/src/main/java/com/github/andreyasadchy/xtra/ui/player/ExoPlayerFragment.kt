@@ -61,7 +61,7 @@ class ExoPlayerFragment : PlayerFragment() {
                     binding.playerControls.playPause.visibility = View.VISIBLE
                 } else {
                     binding.playerControls.playPause.setImageResource(R.drawable.baseline_pause_black_48)
-                    if (playbackService?.type == BasePlaybackService.STREAM && !requireContext().prefs().getBoolean(C.PLAYER_PAUSE, false)) {
+                    if (playbackService?.type == BasePlaybackService.STREAM && !requireContext().prefs().getBoolean(C.PLAYER_PAUSE, false) && !tvMode) {
                         binding.playerControls.playPause.visibility = View.GONE
                     }
                 }
@@ -81,7 +81,7 @@ class ExoPlayerFragment : PlayerFragment() {
                     binding.playerControls.playPause.visibility = View.VISIBLE
                 } else {
                     binding.playerControls.playPause.setImageResource(R.drawable.baseline_pause_black_48)
-                    if (playbackService?.type == BasePlaybackService.STREAM && !requireContext().prefs().getBoolean(C.PLAYER_PAUSE, false)) {
+                    if (playbackService?.type == BasePlaybackService.STREAM && !requireContext().prefs().getBoolean(C.PLAYER_PAUSE, false) && !tvMode) {
                         binding.playerControls.playPause.visibility = View.GONE
                     }
                 }
@@ -99,7 +99,7 @@ class ExoPlayerFragment : PlayerFragment() {
                     binding.playerControls.playPause.visibility = View.VISIBLE
                 } else {
                     binding.playerControls.playPause.setImageResource(R.drawable.baseline_pause_black_48)
-                    if (playbackService?.type == BasePlaybackService.STREAM && !requireContext().prefs().getBoolean(C.PLAYER_PAUSE, false)) {
+                    if (playbackService?.type == BasePlaybackService.STREAM && !requireContext().prefs().getBoolean(C.PLAYER_PAUSE, false) && !tvMode) {
                         binding.playerControls.playPause.visibility = View.GONE
                     }
                 }
@@ -305,7 +305,7 @@ class ExoPlayerFragment : PlayerFragment() {
                             binding.playerControls.playPause.visibility = View.VISIBLE
                         } else {
                             binding.playerControls.playPause.setImageResource(R.drawable.baseline_pause_black_48)
-                            if (playbackService?.type == BasePlaybackService.STREAM && !requireContext().prefs().getBoolean(C.PLAYER_PAUSE, false)) {
+                            if (playbackService?.type == BasePlaybackService.STREAM && !requireContext().prefs().getBoolean(C.PLAYER_PAUSE, false) && !tvMode) {
                                 binding.playerControls.playPause.visibility = View.GONE
                             }
                         }

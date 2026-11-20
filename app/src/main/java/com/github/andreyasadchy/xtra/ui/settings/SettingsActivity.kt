@@ -65,6 +65,7 @@ import com.github.andreyasadchy.xtra.model.ui.SettingsSearchItem
 import com.github.andreyasadchy.xtra.ui.common.IntegrityDialog
 import com.github.andreyasadchy.xtra.ui.settings.SettingsViewModel.Companion.SettingsViewModelFactory
 import com.github.andreyasadchy.xtra.util.isTv
+import com.github.andreyasadchy.xtra.util.setupTvDialogFocusHighlight
 import com.github.andreyasadchy.xtra.util.setupTvFocusHighlight
 import com.github.andreyasadchy.xtra.util.C
 import com.github.andreyasadchy.xtra.util.TwitchApiHelper
@@ -100,7 +101,10 @@ class SettingsActivity : AppCompatActivity() {
         applyTheme()
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        if (isTv()) setupTvFocusHighlight()
+        if (isTv()) {
+            setupTvFocusHighlight()
+            setupTvDialogFocusHighlight()
+        }
         val ignoreCutouts = prefs().getBoolean(C.UI_DRAW_BEHIND_CUTOUTS, false)
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
