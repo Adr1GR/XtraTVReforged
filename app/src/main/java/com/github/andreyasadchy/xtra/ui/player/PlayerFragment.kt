@@ -148,6 +148,12 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         if (!isMaximized || view == null) return false
         val isLive = playbackService?.type == BasePlaybackService.STREAM
         when (event.keyCode) {
+            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_CAPTIONS, KeyEvent.KEYCODE_PROG_YELLOW -> {
+                if (event.action == KeyEvent.ACTION_DOWN && !requireContext().prefs().getBoolean(C.CHAT_DISABLE, false)) {
+                    if (isChatOpen) hideChat() else showChat()
+                }
+                return true
+            }
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE -> {
                 if (event.action == KeyEvent.ACTION_DOWN) {
                     playPause()
@@ -337,7 +343,13 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             } else {
                 disableBackground()
             }
-            isChatOpen = requireContext().prefs().getBoolean(C.KEY_CHAT_OPENED, true) && !requireContext().prefs().getBoolean(C.CHAT_DISABLE, false) && !requireContext().isTv()
+            val isTvDevice = requireContext().isTv()
+            // On TV the chat is a read-only side panel: closed by default and never focusable,
+            // so D-pad navigation stays on the player. It is toggled with the remote (see handleTvKeyEvent).
+            isChatOpen = requireContext().prefs().getBoolean(C.KEY_CHAT_OPENED, !isTvDevice) && !requireContext().prefs().getBoolean(C.CHAT_DISABLE, false)
+            if (isTvDevice) {
+                chatLayout.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+            }
             chatWidthLandscape = requireContext().prefs().getInt(C.LANDSCAPE_CHAT_WIDTH, 0)
             resizeMode = requireContext().prefs().getInt(C.ASPECT_RATIO_LANDSCAPE, AspectRatioFrameLayout.RESIZE_MODE_FIT)
             aspectRatioFrameLayout.setAspectRatio(16f / 9f)

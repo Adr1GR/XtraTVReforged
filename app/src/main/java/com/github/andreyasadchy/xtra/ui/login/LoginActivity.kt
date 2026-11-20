@@ -33,15 +33,19 @@ import com.github.andreyasadchy.xtra.R
 import com.github.andreyasadchy.xtra.XtraApp
 import com.github.andreyasadchy.xtra.XtraModule
 import com.github.andreyasadchy.xtra.databinding.ActivityLoginBinding
+import com.github.andreyasadchy.xtra.util.setupTvFocusHighlight
 import com.github.andreyasadchy.xtra.util.C
 import com.github.andreyasadchy.xtra.util.TwitchApiHelper
 import com.github.andreyasadchy.xtra.util.applyTheme
 import com.github.andreyasadchy.xtra.util.getAlertDialogBuilder
+import com.github.andreyasadchy.xtra.util.isTv
 import com.github.andreyasadchy.xtra.util.prefs
 import com.github.andreyasadchy.xtra.util.tokenPrefs
 import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.regex.Pattern
@@ -72,6 +76,7 @@ class LoginActivity : AppCompatActivity() {
         applyTheme()
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        if (isTv()) setupTvFocusHighlight()
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             binding.root.updateLayoutParams<ViewGroup.MarginLayoutParams> {
@@ -132,6 +137,12 @@ class LoginActivity : AppCompatActivity() {
                     putString(C.GQL_CLIENT_ID2, "ue6666qo983tsx6so1t0vnawi233wa")
                     putString(C.GQL_REDIRECT2, "https://www.twitch.tv/settings/connections")
                 }
+            }
+            if (isTv()) {
+                // Typing credentials into a WebView with a remote is impractical on TV:
+                // use the device code flow and let the user confirm from another device.
+                setupTvCodeLogin(networkLibrary)
+                return
             }
             val apiSetting = prefs().getString(C.API_LOGIN, "0")?.toInt() ?: 0
             val helixRedirect = prefs().getString(C.HELIX_REDIRECT, "https://localhost")
@@ -624,6 +635,74 @@ class LoginActivity : AppCompatActivity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun setupTvCodeLogin(networkLibrary: String?) {
+        with(binding) {
+            val gqlClientId = prefs().getString(C.GQL_CLIENT_ID2, "kd1unb4b3q4t58fwlpcbzcbnm76a8fp")
+            webView.visibility = View.GONE
+            havingTrouble.visibility = View.GONE
+            textZoom.visibility = View.GONE
+            copyCode.visibility = View.GONE
+            openUrl.visibility = View.GONE
+            tvLoginInstructions.visibility = View.VISIBLE
+            tvLoginInstructions.text = getString(R.string.tv_code_login_instructions, "twitch.tv/activate")
+            codeText.visibility = View.VISIBLE
+            codeText.textSize = 56f
+            next.visibility = View.GONE
+            var pollJob: Job? = null
+            lateinit var start: () -> Unit
+            start = {
+                pollJob?.cancel()
+                next.visibility = View.GONE
+                codeText.text = getString(R.string.loading)
+                pollJob = lifecycleScope.launch {
+                    val response = try {
+                        xtraModule.authRepository.getDeviceCode(networkLibrary, "client_id=${gqlClientId}&scopes=channel_read+chat%3Aread+user_blocks_edit+user_blocks_read+user_follows_edit+user_read")
+                    } catch (e: Exception) {
+                        null
+                    }
+                    val deviceCode = response?.deviceCode
+                    val userCode = response?.userCode
+                    if (deviceCode.isNullOrBlank() || userCode.isNullOrBlank()) {
+                        codeText.text = getString(R.string.connection_error)
+                        next.visibility = View.VISIBLE
+                        next.requestFocus()
+                        return@launch
+                    }
+                    codeText.text = userCode
+                    tvLoginInstructions.text = getString(R.string.tv_code_login_instructions, "twitch.tv/activate") +
+                            "\n\n" + getString(R.string.tv_code_login_waiting)
+                    val interval = (response.interval ?: 5).coerceAtLeast(2) * 1000L
+                    val deadline = System.currentTimeMillis() + (response.expiresIn ?: 1800) * 1000L
+                    while (System.currentTimeMillis() < deadline) {
+                        delay(interval)
+                        val token = try {
+                            xtraModule.authRepository.getToken(networkLibrary, "client_id=${gqlClientId}&device_code=${deviceCode}&grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code").token
+                        } catch (e: Exception) {
+                            null
+                        }
+                        if (!token.isNullOrBlank()) {
+                            if (validateGQLToken(networkLibrary, gqlClientId, token)) {
+                                this@LoginActivity.gqlClientId = gqlClientId
+                                gqlToken = token
+                                done()
+                            } else {
+                                Toast.makeText(this@LoginActivity, R.string.connection_error, Toast.LENGTH_LONG).show()
+                                start()
+                            }
+                            return@launch
+                        }
+                    }
+                    tvLoginInstructions.text = getString(R.string.tv_code_login_expired)
+                    codeText.text = ""
+                    next.visibility = View.VISIBLE
+                    next.requestFocus()
+                }
+            }
+            next.setOnClickListener { start() }
+            start()
         }
     }
 

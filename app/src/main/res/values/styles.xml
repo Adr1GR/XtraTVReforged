@@ -188,14 +188,14 @@
     <style name="CompactCard" parent="Widget.Material3.CardView.Elevated">
         <item name="android:layout_margin">4dp</item>
         <item name="strokeColor">@color/card_focus_stroke</item>
-        <item name="strokeWidth">3dp</item>
+        <item name="strokeWidth">4dp</item>
     </style>
 
     <style name="CompactCardAmoled" parent="Widget.Material3.CardView.Elevated">
         <item name="materialThemeOverlay">@style/CardOverlayAmoled</item>
         <item name="android:layout_margin">4dp</item>
         <item name="strokeColor">@color/card_focus_stroke</item>
-        <item name="strokeWidth">3dp</item>
+        <item name="strokeWidth">4dp</item>
     </style>
 
     <style name="CompactRadioButton" parent="Widget.Material3.CompoundButton.RadioButton">
@@ -1126,14 +1126,14 @@
     <style name="Card" parent="Widget.Material3.CardView.Elevated">
         <item name="android:layout_margin">8dp</item>
         <item name="strokeColor">@color/card_focus_stroke</item>
-        <item name="strokeWidth">3dp</item>
+        <item name="strokeWidth">4dp</item>
     </style>
 
     <style name="CardAmoled" parent="Widget.Material3.CardView.Elevated">
         <item name="materialThemeOverlay">@style/CardOverlayAmoled</item>
         <item name="android:layout_margin">8dp</item>
         <item name="strokeColor">@color/card_focus_stroke</item>
-        <item name="strokeWidth">3dp</item>
+        <item name="strokeWidth">4dp</item>
     </style>
 
     <style name="CardOverlayAmoled">
@@ -1467,7 +1467,7 @@
         <item name="materialThemeOverlay">@style/MaterialCardOverlay</item>
         <item name="cardCornerRadius">0dp</item>
         <item name="strokeColor">@color/card_focus_stroke</item>
-        <item name="strokeWidth">3dp</item>
+        <item name="strokeWidth">4dp</item>
     </style>
 
     <style name="MaterialCardOverlay">
