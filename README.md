@@ -13,7 +13,7 @@ This repository is **not** the official Xtra project. It is based on the latest 
 
 ### AI DISCLAIMER
 
-The TV changes in this fork were written with the help of AI tools (Claude), both in the original XtraTV fork and in porting them to the current upstream.
+Parts of this fork, including porting the TV changes to the current upstream, were written with the help of AI tools (Claude).
 
 ### TV features
 
